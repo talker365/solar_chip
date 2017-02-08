@@ -1,0 +1,299 @@
+#!/bin/bash 
+
+<<Interface_Modes
+
+ Interface: wlan1 = AP for all modes.
+
+ Parameters: type, Callsign, NodeId, AdminPassword, NodeCH, Eth0Mode, RouterName, WifiSSID, WifiPassword, Eth0Use, apSSID, apPASS, apCH, nodeSSID
+
+Interface_Modes
+
+#---[ FUNCTIONS ]---------------------------------------------------------------------
+
+createAP()
+{
+# Create access point configuration file
+sudo echo "#If you want dnsmasq to listen for DHCP and DNS requests only on" > /etc/dnsmasq.d/access_point.conf
+sudo echo "#specified interfaces (and the loopback) give the name of the" >> /etc/dnsmasq.d/access_point.conf
+sudo echo "#interface (eg eth0) here." >> /etc/dnsmasq.d/access_point.conf
+sudo echo "#Repeat the line for more than one interface." >> /etc/dnsmasq.d/access_point.conf
+sudo echo "interface=wlan0" >> /etc/dnsmasq.d/access_point.conf
+sudo echo "#Or you can specify which interface not to listen on" >> /etc/dnsmasq.d/access_point.conf
+sudo echo "except-interface=eth0 " >> /etc/dnsmasq.d/access_point.conf
+sudo echo "" >> /etc/dnsmasq.d/access_point.conf
+sudo echo "#Uncomment this to enable the integrated DHCP server, you need" >> /etc/dnsmasq.d/access_point.conf
+sudo echo "#to supply the range of addresses available for lease and optionally" >> /etc/dnsmasq.d/access_point.conf
+sudo echo "#a lease time. If you have more than one network, you will need to" >> /etc/dnsmasq.d/access_point.conf
+sudo echo "#repeat this for each network on which you want to supply DHCP" >> /etc/dnsmasq.d/access_point.conf
+sudo echo "#service." >> /etc/dnsmasq.d/access_point.conf
+sudo echo "dhcp-range=172.20.0.100,172.20.0.250,1h " >> /etc/dnsmasq.d/access_point.conf
+
+# Set up a static IP for the AP(accesspoint)
+sudo echo "" >> /etc/network/interfaces
+sudo echo "auto wlan0" >> /etc/network/interfaces
+sudo echo "iface wlan0 inet static" >> /etc/network/interfaces
+sudo echo "    address 172.20.0.1" >> /etc/network/interfaces
+sudo echo "    netmask 255.255.255.0" >> /etc/network/interfaces
+
+# Restart the wlan0 interface:
+sudo ifdown wlan0
+sudo ifup wlan0
+
+# Restart the DHCP server
+sudo /etc/init.d/dnsmasq restart 
+
+# Configure the WiFi access point on wlan0
+sudo echo "interface=wlan0" > /etc/hostapd.conf
+sudo echo "driver=nl80211" >> /etc/hostapd.conf
+sudo echo "ssid=$apSSID" >> /etc/hostapd.conf
+sudo echo "channel=$apCH" >> /etc/hostapd.conf
+sudo echo "auth_algs=3" >> /etc/hostapd.conf
+sudo echo "max_num_sta=10" >> /etc/hostapd.conf
+sudo echo "wpa=2" >> /etc/hostapd.conf
+sudo echo "wpa_passphrase=$apPASS" >> /etc/hostapd.conf
+sudo echo "wpa_pairwise=TKIP CCMP" >> /etc/hostapd.conf
+sudo echo "rsn_pairwise=CCMP" >> /etc/hostapd.conf
+sudo echo "ctrl_interface=/var/run/hostapd" >> /etc/hostapd.conf
+
+# Create script for handling service spin up
+sudo echo "#!/bin/bash" > /usr/sbin/vdn-router
+sudo echo "" >> /usr/sbin/vdn-router
+sudo echo "# Make sure interface is up" >> /usr/sbin/vdn-router
+sudo echo "ifdown wlan0" >> /usr/sbin/vdn-router
+sudo echo "ifup wlan0" >> /usr/sbin/vdn-router
+sudo echo "" >> /usr/sbin/vdn-router
+sudo echo "# Enable DNS forwarding" >> /usr/sbin/vdn-router
+sudo echo "#sysctl -w net.ipv4.ip_forward=1" >> /usr/sbin/vdn-router
+sudo echo "" >> /usr/sbin/vdn-router
+sudo echo "# Enable NAT" >> /usr/sbin/vdn-router
+sudo echo "#iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE" >> /usr/sbin/vdn-router
+sudo echo "" >> /usr/sbin/vdn-router
+sudo echo "# Start the Access Point" >> /usr/sbin/vdn-router
+sudo echo "/usr/sbin/hostapd /etc/hostapd.conf" >> /usr/sbin/vdn-router
+
+# Make the spin up script executable
+sudo chmod +x /usr/sbin/vdn-router
+
+# Configure it to create AP on boot.
+sudo echo "[Unit]" > /lib/systemd/system/hostapd-systemd.service
+sudo echo "Description=hostapd service" >> /lib/systemd/system/hostapd-systemd.service
+sudo echo "Wants=network-manager.service" >> /lib/systemd/system/hostapd-systemd.service
+sudo echo "After=network-manager.service" >> /lib/systemd/system/hostapd-systemd.service
+sudo echo "Wants=module-init-tools.service" >> /lib/systemd/system/hostapd-systemd.service
+sudo echo "After=module-init-tools.service" >> /lib/systemd/system/hostapd-systemd.service
+sudo echo "ConditionPathExists=/etc/hostapd.conf" >> /lib/systemd/system/hostapd-systemd.service
+sudo echo "" >> /lib/systemd/system/hostapd-systemd.service
+sudo echo "[Service]" >> /lib/systemd/system/hostapd-systemd.service
+sudo echo "ExecStart=/usr/sbin/vdn-router" >> /lib/systemd/system/hostapd-systemd.service
+sudo echo "" >> /lib/systemd/system/hostapd-systemd.service
+sudo echo "[Install]" >> /lib/systemd/system/hostapd-systemd.service
+sudo echo "WantedBy=multi-user.target" >> /lib/systemd/system/hostapd-systemd.service
+
+# Restart Services
+sudo /usr/sbin/update-rc.d hostapd disable
+sudo /bin/systemctl daemon-reload
+sudo /bin/systemctl enable hostapd-systemd
+sudo /bin/systemctl start hostapd-systemd
+
+
+}
+
+connectWifi()
+{
+# Connect to Wifi
+sudo nmcli dev disconnect wlan1 2>&1
+sudo nmcli device wifi connect $wifiSSID password $wifiPASS ifname wlan0 2>&1
+}
+
+
+createADHOC()
+{
+sudo chmod 777 /usr/sbin/olsrd-adhoc-setup
+sudo echo "#!/bin/sh" > /usr/sbin/olsrd-adhoc-setup
+sudo echo "# Auto created by Valley Digital Network Installer." >> /usr/sbin/olsrd-adhoc-setup
+sudo echo "sudo /sbin/ifconfig $nodeiface down" >> /usr/sbin/olsrd-adhoc-setup
+sudo echo "sudo /sbin/iwconfig $nodeiface mode ad-hoc channel $nodeCH essid $nodeSSID" >> /usr/sbin/olsrd-adhoc-setup
+sudo echo "sudo /sbin/ifconfig $nodeiface up" >> /usr/sbin/olsrd-adhoc-setup
+#sudo echo "sudo iw $nodeiface connect $nodeSSID" >> /usr/sbin/olsrd-adhoc-setup
+sudo echo "sleep 2" >> /usr/sbin/olsrd-adhoc-setup
+sudo echo "olsrd -f /etc/olsrd/olsrd.conf" >> /usr/sbin/olsrd-adhoc-setup
+sudo chmod 755 /usr/sbin/olsrd-adhoc-setup
+
+# Lets Calculate the IP Address via Mac Address
+sudo ifconfig $nodeiface up
+sleep 1
+echo -ne "Setting up IP address: "
+MACID=`sudo cat /sys/class/net/$nodeiface/address`
+MAC4=`echo $MACID | cut -d : -f 4`
+MAC5=`echo $MACID | cut -d : -f 5`
+MAC6=`echo $MACID | cut -d : -f 6`
+ip2=`printf %d 0x$MAC4`
+ip3=`printf %d 0x$MAC5`
+ip4=`printf %d 0x$MAC6`
+net=10
+nodeIP=$net.$ip2.$ip3.$ip4
+echo -e $nodeIP"\n"
+
+# add to /etc/network/interfaces
+sudo echo >> /etc/network/interfaces
+sudo echo "auto $nodeiface " >> /etc/network/interfaces
+sudo echo "iface $nodeiface inet static " >> /etc/network/interfaces
+sudo echo -e "\taddress $nodeIP" >> /etc/network/interfaces
+sudo echo -e "\tnetmask 255.0.0.0 " >> /etc/network/interfaces
+sudo echo -e "\twireless-channel $nodeCH " >> /etc/network/interfaces
+sudo echo -e "\twireless-essid $nodeSSID" >> /etc/network/interfaces
+sudo echo -e "\twireless-mode ad-hoc " >> /etc/network/interfaces
+
+}
+
+createDNS()
+{
+sudo echo "#If you want dnsmasq to listen for DHCP and DNS requests only on" > /etc/dnsmasq.d/access_point.conf
+sudo echo "#specified interfaces (and the loopback) give the name of the" >> /etc/dnsmasq.d/access_point.conf
+sudo echo "#interface (eg eth0) here." >> /etc/dnsmasq.d/access_point.conf
+sudo echo "#Repeat the line for more than one interface." >> /etc/dnsmasq.d/access_point.conf
+sudo echo "interface=wlan1" >> /etc/dnsmasq.d/access_point.conf
+sudo echo "#Or you can specify which interface not to listen on" >> /etc/dnsmasq.d/access_point.conf
+sudo echo "except-interface=eth0 " >> /etc/dnsmasq.d/access_point.conf
+sudo echo "" >> /etc/dnsmasq.d/access_point.conf
+sudo echo "#Uncomment this to enable the integrated DHCP server, you need" >> /etc/dnsmasq.d/access_point.conf
+sudo echo "#to supply the range of addresses available for lease and optionally" >> /etc/dnsmasq.d/access_point.conf
+sudo echo "#a lease time. If you have more than one network, you will need to" >> /etc/dnsmasq.d/access_point.conf
+sudo echo "#repeat this for each network on which you want to supply DHCP" >> /etc/dnsmasq.d/access_point.conf
+sudo echo "#service." >> /etc/dnsmasq.d/access_point.conf
+sudo echo "dhcp-range=172.20.0.100,172.20.0.250,1h " >> /etc/dnsmasq.d/access_point.conf
+}
+
+createOLSR()
+{
+# Set host file and hostname
+sudo echo -e "#Created by VDN Scripts. Do not edit !!!" > /etc/hosts
+sudo echo -e "127.0.0.1   localhost" >> /etc/hosts
+sudo echo -e "$nodeIP\t$nodeID" >> /etc/hosts
+sudo echo "::1       localhost ip6-localhost ip6-loopback" >> /etc/hosts
+sudo echo "ff02::1   ip6-allnodes" >> /etc/hosts
+sudo echo "ff02::2   ip6-allrouters" >> /etc/hosts
+sudo echo $nodeID > /etc/hostname
+
+# Create the OLSRD Config File
+sudo cp /etc/olsrd/olsrd.conf.vdn /etc/olsrd/olsrd.conf
+sudo sed -i.bak "s/.*MainIp.*/MainIp $nodeIP/" /etc/olsrd/olsrd.conf
+sudo sed -i.bak "s/.*Interface.*/Interface \"$nodeiface\"/" /etc/olsrd/olsrd.conf
+sudo sed -i.bak "s/.*PlParam \"name\".*/    PlParam \"name\" \"$nodeID\"/" /etc/olsrd/olsrd.conf
+
+# edit OLSRD boot options
+sudo sed -i.bak "s/.*#START_OLSRD=.*/START_OLSRD=\"YES\"/" /etc/default/olsrd
+sudo sed -i.bak "s/.*#SETUP_ADHOC=.*/SETUP_ADHOC=\"YES\"/" /etc/default/olsrd
+sudo sed -i.bak "s/.*MESH_IF=.*/MESH_IF=$nodeiface/" /etc/default/olsrd
+sudo sed -i.bak "s/.*channel=.*/channel=$nodeCH/" /etc/default/olsrd
+sudo sed -i.bak "s/.*ssid=.*/ssid=$nodeSSID/" /etc/default/olsrd
+sudo sed -i.bak "s/.*bssid=.*/#bssid=/" /etc/default/olsrd
+sudo /usr/sbin/olsrd-adhoc-setup
+sudo ifconfig $nodeiface inet $nodeIP broadcast $net.255.255.255
+}
+
+enableNAT()
+{
+# Download the kernel mods for enabling NAT
+sudo cd /lib/modules/4.4.13-ntc-mlc/kernel/net/ipv4/netfilter
+sudo cp /tmp/vdn/ipt_MASQUERADE.ko .
+sudo cp /tmp/vdn/nf_nat_masquerade_ipv4.ko .
+sudo depmod
+}
+
+
+#---[ MAIN ]----------------------------------------------------------------------------------
+
+clear
+#if [[ $# -eq 0 ]]; then checkInterfaces; fi
+
+request=$1
+
+if [[ $request == "check" ]]; then 
+   if [[ $2 == "installed" ]]; then [ -e "/var/www/html/.installed" ] && echo "TRUE" || echo "FALSE"; fi
+   if [[ $2 == "ethernet" ]]; then [ -d "/sys/class/net/eth0" ] && echo "TRUE" || echo "FALSE"; fi
+fi
+
+# Get all Parameter Values
+  callsign=$2
+  nodeID=$3
+  adminPASS=$4
+  nodeCH=$5
+  nodeEthMode=$6
+  shift; shift; shift; shift; shift; shift;
+  routerName=$1
+  wifiSSID=$2
+  wifiPASS=$3
+  routeEthMode=$4
+  apSSID=$5
+  apPASS=$6
+  apCH=$7
+  nodeSSID=$8
+
+# Router Mode
+if [[ $request == "microrouter" ]]; then  
+  
+  echo "Router [$routerName]"
+  echo "Wifi [$wifiSSID]"
+  echo "WifiPassword [$wifiPASS]"
+  echo "Eth Mode [$routeEthMode]"
+  echo "AP [$apSSID]"
+  echo "AP-Pass [$apPASS]"
+  echo "AP-CH [$apCH]"
+  echo
+
+if [[ $routeEthMode == "WAN" ]]; then 
+  echo "SETUP IP Forwarding for ETH0"
+fi
+
+  enableNAT
+  createAP
+  connectWifi
+
+# Set host file and hostname
+  echo -e "127.0.0.1\tlocalhost" > /etc/hosts
+  echo -e "$nodeIP\t$routerName" >> /etc/hosts
+  echo "::1       localhost ip6-localhost ip6-loopback" >> /etc/hosts
+  echo "ff02::1   ip6-allnodes" >> /etc/hosts
+  echo "ff02::2   ip6-allrouters" >> /etc/hosts
+  echo $routerName > /etc/hostname
+
+fi
+
+# Mesh Mode
+if [[ $request == "micromesh" ]]; then 
+
+  echo "Callsign [$callsign]"
+  echo "NodeID [$nodeID]"
+  echo "Admin Password [$adminPASS]"
+  echo "Node Channel [$nodeCH]"
+  echo "Node Ethernet Mode [$nodeEthMode]"
+  echo "Node SSID [$nodeSSID]"
+  echo
+  echo "Router [$routerName]"
+  echo "Wifi [$wifiSSID]"
+  echo "WifiPassword [$wifiPASS]"
+  echo "Eth Mode [$routeEthMode]"
+  echo "AP [$apSSID]"
+  echo "AP-Pass [$apPASS]"
+  echo "AP-CH [$apCH]"
+  echo
+  nodeiface="wlan0"
+  createADHOC
+  createOLSR
+#  createAP
+
+  sudo chgrp -R www-data /etc/olsrd/olsrd.conf
+  sudo chmod g+w -R /etc/olsrd/olsrd.conf
+
+# Update resolv.conf file.
+if [ -L /etc/resolv.conf ]; then
+    rm -f /etc/resolv.conf
+    touch /etc/resolv.conf
+fi
+
+  sudo bash -c "echo 'nameserver 8.8.8.8' > /etc/resolv.conf"
+
+fi
+
+

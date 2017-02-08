@@ -1,0 +1,205 @@
+#!/bin/bash
+
+# This script will install the VDN Chip Mesh Firmware.  This script needs to be executed
+# remotely as root.
+
+# 1) Untar installation packages
+cd /tmp/vdn
+tar -xf packages.tar
+
+# 2) Install dnsmasq:
+dpkg -G -E -i dnsmasq_2.72-3+deb8u1_all.deb
+
+# 2) Install support files:
+dpkg -G -E -i liberror-perl_0.17-1.1_all.deb
+dpkg -G -E -i libcurl3-gnutls_7.38.0-4+deb8u5_armhf.deb
+
+# 2) Install git:
+dpkg -G -E -i git-man_2.1.4-2.1+deb8u2_all.deb
+dpkg -G -E -i git_1%3a2.1.4-2.1+deb8u2_armhf.deb
+dpkg -G -E -i git_2.1.4-2.1+deb8u2_armhf.deb
+
+# 2) Install support files:
+dpkg -G -E -i rsync_3.1.1-3_armhf.deb
+dpkg -G -E -i ssl-cert_1.0.35_all.deb
+
+# 2) Install apache:
+dpkg -G -E -i libapr1_1.5.1-3_armhf.deb
+dpkg -G -E -i libaprutil1_1.5.4-1_armhf.deb
+dpkg -G -E -i libaprutil1-dbd-sqlite3_1.5.4-1_armhf.deb
+dpkg -G -E -i libaprutil1-ldap_1.5.4-1_armhf.deb
+dpkg -G -E -i liblua5.1-0_5.1.5-7.1_armhf.deb
+dpkg -G -E -i apache2-bin_2.4.10-10+deb8u7_armhf.deb
+dpkg -G -E -i apache2-data_2.4.10-10+deb8u7_all.deb
+dpkg -G -E -i apache2-utils_2.4.10-10+deb8u7_armhf.deb
+dpkg -G -E -i mime-support_3.58_all.deb
+dpkg -G -E -i apache2_2.4.10-10+deb8u7_armhf.deb
+# php files...
+dpkg -G -E -i libmagic1_1%3a5.22+15-2+deb8u2_armhf.deb
+dpkg -G -E -i libonig2_5.9.5-3.2_armhf.deb
+dpkg -G -E -i libperl4-corelibs-perl_0.003-1_all.deb
+dpkg -G -E -i libqdbm14_1.8.78-5+b1_armhf.deb
+dpkg -G -E -i lsof_4.86+dfsg-1_armhf.deb
+dpkg -G -E -i psmisc_22.21-2_armhf.deb
+dpkg -G -E -i php5-common_5.6.29+dfsg-0+deb8u1_armhf.deb
+dpkg -G -E -i php5-json_1.3.6-1_armhf.deb
+dpkg -G -E -i php5-cli_5.6.29+dfsg-0+deb8u1_armhf.deb
+dpkg -G -E -i php5-readline_5.6.29+dfsg-0+deb8u1_armhf.deb
+dpkg -G -E -i libapache2-mod-php5_5.6.29+dfsg-0+deb8u1_armhf.deb
+# vim...
+dpkg -G -E -i libgpm2_1.20.4-6.1+b2_armhf.deb
+dpkg -G -E -i vim-common_2%3a7.4.488-7+deb8u1_armhf.deb
+dpkg -G -E -i vim-tiny_2%3a7.4.488-7+deb8u1_armhf.deb
+dpkg -G -E -i vim-runtime_2%3a7.4.488-7+deb8u1_all.deb
+dpkg -G -E -i vim_2%3a7.4.488-7+deb8u1_armhf.deb
+# olsr
+dpkg -G -E -i olsrd_0.6.6.2-1_armhf.deb
+dpkg -G -E -i olsrd-plugins_0.6.6.2-1_armhf.deb
+
+#wireless tools (iwconfig)
+dpkg -G -E -i libc6_2.19-18+deb8u7_armhf.deb
+dpkg -G -E -i libiw30_30~pre9-8_armhf.deb
+dpkg -G -E -i wireless-tools_30~pre9-8_armhf.deb
+
+#vtunnel
+#dpkg -G -E -i makedev_2.3.1-93_all.deb
+dpkg -G -E -i zlib1g_1.2.8.dfsg-2+b1_armhf.deb
+dpkg -G -E -i vtun_3.0.3-2_armhf.deb
+
+# 4) Download the kernel mods for enabling NAT
+cd /lib/modules/4.4.13-ntc-mlc/kernel/net/ipv4/netfilter
+cp /tmp/vdn/ipt_MASQUERADE.ko .
+cp /tmp/vdn/nf_nat_masquerade_ipv4.ko .
+depmod
+cd /tmp/vdn
+
+# 5) Create a configure file . With this eth0 becomes a way to connect to a network, and wlan1 becomes CHIPs access point.
+# Add some lines in order to transfer ethernet to wlan1
+# We also want to set the range and time of leases:
+
+echo "#If you want dnsmasq to listen for DHCP and DNS requests only on" > /etc/dnsmasq.d/access_point.conf
+echo "#specified interfaces (and the loopback) give the name of the" >> /etc/dnsmasq.d/access_point.conf
+echo "#interface (eg eth0) here." >> /etc/dnsmasq.d/access_point.conf
+echo "#Repeat the line for more than one interface." >> /etc/dnsmasq.d/access_point.conf
+echo "interface=wlan1" >> /etc/dnsmasq.d/access_point.conf
+echo "#Or you can specify which interface not to listen on" >> /etc/dnsmasq.d/access_point.conf
+echo "except-interface=eth0 " >> /etc/dnsmasq.d/access_point.conf
+echo "" >> /etc/dnsmasq.d/access_point.conf
+echo "#Uncomment this to enable the integrated DHCP server, you need" >> /etc/dnsmasq.d/access_point.conf
+echo "#to supply the range of addresses available for lease and optionally" >> /etc/dnsmasq.d/access_point.conf
+echo "#a lease time. If you have more than one network, you will need to" >> /etc/dnsmasq.d/access_point.conf
+echo "#repeat this for each network on which you want to supply DHCP" >> /etc/dnsmasq.d/access_point.conf
+echo "#service." >> /etc/dnsmasq.d/access_point.conf
+echo "dhcp-range=172.20.0.100,172.20.0.250,1h " >> /etc/dnsmasq.d/access_point.conf
+
+# 6) Set up a static IP for the AP(accesspoint)
+echo "" >> /etc/network/interfaces
+echo "auto wlan1" >> /etc/network/interfaces
+echo "iface wlan1 inet static" >> /etc/network/interfaces
+echo "    address 172.20.0.1" >> /etc/network/interfaces
+echo "    netmask 255.255.255.0" >> /etc/network/interfaces
+
+# 7) Restart the wlan1 interface:
+ifdown wlan1
+ifup wlan1
+
+# 8) Restart the DHCP server
+/etc/init.d/dnsmasq restart  
+
+###  # 9) Turn on DNS forwarding
+###  sysctl -w net.ipv4.ip_forward=1
+
+###  # 10) Setup NAT to route through eth0
+###  iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+
+# 11) Configure the WiFi access point on wlan1
+echo "interface=wlan1" > /etc/hostapd.conf
+echo "driver=nl80211" >> /etc/hostapd.conf
+echo "ssid=vdn-micro-AP" >> /etc/hostapd.conf
+echo "channel=11" >> /etc/hostapd.conf
+echo "auth_algs=3" >> /etc/hostapd.conf
+echo "max_num_sta=10" >> /etc/hostapd.conf
+echo "wpa=2" >> /etc/hostapd.conf
+echo "wpa_passphrase=micromesh" >> /etc/hostapd.conf
+echo "wpa_pairwise=TKIP CCMP" >> /etc/hostapd.conf
+echo "rsn_pairwise=CCMP" >> /etc/hostapd.conf
+echo "ctrl_interface=/var/run/hostapd" >> /etc/hostapd.conf
+
+# 12) Create script for handling service spin up
+echo "#!/bin/bash" > /usr/sbin/vdn-router
+echo "" >> /usr/sbin/vdn-router
+echo "# Make sure interface is up" >> /usr/sbin/vdn-router
+echo "ifdown wlan1" >> /usr/sbin/vdn-router
+echo "ifup wlan1" >> /usr/sbin/vdn-router
+echo "" >> /usr/sbin/vdn-router
+echo "# Enable DNS forwarding" >> /usr/sbin/vdn-router
+echo "#sysctl -w net.ipv4.ip_forward=1" >> /usr/sbin/vdn-router
+echo "" >> /usr/sbin/vdn-router
+echo "# Enable NAT" >> /usr/sbin/vdn-router
+echo "#iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE" >> /usr/sbin/vdn-router
+echo "" >> /usr/sbin/vdn-router
+echo "# Start the Access Point" >> /usr/sbin/vdn-router
+echo "/usr/sbin/hostapd /etc/hostapd.conf" >> /usr/sbin/vdn-router
+
+# 13) Make the spin up script executable
+chmod +x /usr/sbin/vdn-router
+
+# 14) Configure it to create AP on boot.
+echo "[Unit]" > /lib/systemd/system/hostapd-systemd.service
+echo "Description=hostapd service" >> /lib/systemd/system/hostapd-systemd.service
+echo "Wants=network-manager.service" >> /lib/systemd/system/hostapd-systemd.service
+echo "After=network-manager.service" >> /lib/systemd/system/hostapd-systemd.service
+echo "Wants=module-init-tools.service" >> /lib/systemd/system/hostapd-systemd.service
+echo "After=module-init-tools.service" >> /lib/systemd/system/hostapd-systemd.service
+echo "ConditionPathExists=/etc/hostapd.conf" >> /lib/systemd/system/hostapd-systemd.service
+echo "" >> /lib/systemd/system/hostapd-systemd.service
+echo "[Service]" >> /lib/systemd/system/hostapd-systemd.service
+echo "ExecStart=/usr/sbin/vdn-router" >> /lib/systemd/system/hostapd-systemd.service
+echo "" >> /lib/systemd/system/hostapd-systemd.service
+echo "[Install]" >> /lib/systemd/system/hostapd-systemd.service
+echo "WantedBy=multi-user.target" >> /lib/systemd/system/hostapd-systemd.service
+
+# 15) Disable the existing systemV script for booting hostapd:
+update-rc.d hostapd disable  
+
+# 16) Setup the systemd service
+systemctl daemon-reload 
+systemctl enable hostapd-systemd 
+
+# 17) Start AP:
+systemctl start hostapd-systemd 
+
+
+
+# setting up terminal preferences
+echo "alias ls='ls --color=auto'" >> /root/.profile
+echo "alias ll='ls -la'" >> /root/.profile
+echo "alias l='ls -l'" >> /root/.profile
+echo "PS1='${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;36m\]\w\[\033[00m\]\$ '"  >> /root/.profile
+LS_COLORS=$LS_COLORS:'di=0;36:' ; export LS_COLORS
+
+# setting up vim
+echo "syntax on" > /root/.vimrc
+echo "colorscheme desert" >> /root/.vimrc
+echo "set ts=4" >> /root/.vimrc
+echo "set number" >> /root/.vimrc
+
+
+# 18) Deploy web files:
+echo -e "\nDeploying web installer..."
+cp /tmp/vdn/web.tar /var/www/html/.
+cd /var/www/html
+tar -xf web.tar
+rm index.html
+cd /tmp/vdn
+
+echo "# Apache" >> /etc/sudoers
+echo "www-data ALL=(ALL:ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+# 19) Setup apache group permissions
+touch /etc/resolv.conf
+for file in /etc/hosts /etc/hostname /etc/hostapd.conf /etc/resolv.conf /etc/network/interfaces /var/www/html/wifiscan /var/www/html/mmconfig; do
+    sudo chgrp www-data ${file}
+    sudo chmod g+w ${file}
+done
+

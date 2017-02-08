@@ -1,0 +1,22 @@
+Steps to install in Windows 10
+
+1. Open command prompt / power shell in admin mode (CTRL+SHIFT Right Click) and enter:
+        set devmgr_show_nonpresent_devices=1
+        start devmgmt.msc
+
+2. Uninstall & delete driver for Chip Flasher
+
+3. Scan for hardware changes
+
+4. Install Ports driver for CDC device
+        Microsoft - Serial
+
+
+https://www.hackster.io/Anwaarullah/sshing-into-c-h-i-p-in-headless-mode-windows-10-driver-fix-b3a6da
+
+https://bbs.nextthing.co/t/putty-connection-step-by-step-for-windows/1636/11
+
+https://bbs.nextthing.co/t/fix-cdc-composite-gadget-4-4-driver-issue-on-windows/7458
+
+http://www.howtogeek.com/167723/how-to-disable-driver-signature-verification-on-64-bit-windows-8.1-so-that-you-can-install-unsigned-drivers/
+

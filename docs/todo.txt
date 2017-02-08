@@ -1,0 +1,34 @@
+todo
+
+Goals:
+1- Edit Installation / Routine Scripts:
+	Handle AP / MESH processes in the mmconfig scripting.
+
+2- Switch Use of WLAN1 for (AP Router or MESH node modes) and concentrate on use ethernet port for both router and mesh uses.
+
+3- Completion of Installation Webpages & test.
+	Upon completing the Webpages for Router and Mesh, we can try to wrap up both modes.
+
+5- Upon completion of Installation, re-direct to a Status Page.
+	From here we can determine what pages, format, etc is needed for Router / Mesh types.
+
+	Page Idea's: 
+		- Status: # of Connected Nodes on AP / Router 
+
+		- Status: If Battery is Equipped	
+			Power Status: (Mains / Emg Backup ie.. battery usage)
+			Battery Voltage
+			Battery Current Status ( ".425 ma" Positive amperage charging / "-600.ma" discharging)
+		
+		- Statis: Typical Router / Mesh Info
+			IP Address, Netmask, Gateway etc...
+
+		- Admin: Typical Network & Password Changes.
+			VTUNNEL Setup
+
+
+
+
+Idea's 
+
+Add a Build# with each execution of build script and Displayed During Installation.

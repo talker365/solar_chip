@@ -1,0 +1,59 @@
+#!/bin/bash
+
+NORMAL="\033[0m"; INVERSE="\033[7m"; BOLD="\033[1m"
+RED="\033[31m"; RED_B="\033[41m"
+GREEN="\033[32m"; GREEN_B="\033[42m"
+YELLOW="\033[33m"; YELLOW_B="\033[43m"
+BLUE="\033[34m"; BLUE_B="\033[44m"
+MAGENTA="\033[35m"; MAGENTA_B="\033[45m"
+CYAN="\033[36m"; CYAN_B="\033[46m"
+
+show_help() {
+
+declare -a devices=(`upsc -l | cut -d" " -f1 `)
+clear
+
+printf "\n\n${YELLOW}Usage: ${GREEN}${0##*/} ${MAGENTA}UPS NAME${NORMAL}       (Case Sensitive)\n"
+printf "======================================================================\n"
+printf "Found ${#devices[@]} UPS Backup Devices.  Available UPS Names are:\n\n"
+
+for i in "${devices[@]}"
+  do
+    printf "${RED}${i}${NORMAL} \n"
+  done
+printf "\n\n"
+exit 1
+}
+
+if [ $# -eq 0 ]; then show_help; fi
+
+upsc $1 > /tmp/ups
+clear
+
+mfg=$(awk '/^ups.mfr:/ { print $2, $3, $4, $5 }' /tmp/ups)
+model=$(awk '/^ups.model:/ { print $2,$3,$4,$5;}' /tmp/ups)
+vendorId=$(awk '/^ups.vendorid:/ { print $2 }' /tmp/ups)
+
+voltageIn=$(awk '/^input.voltage:/ { print $2 }' /tmp/ups)
+voltageOut=$(awk '/^output.voltage:/ { print $2 }' /tmp/ups)
+
+batteryChg=$(awk '/^battery.charge:/ { print $2 }' /tmp/ups)
+batteryVolts=$(awk '/^battery.voltage:/ { print $2 }' /tmp/ups)
+batteryTime=$(awk '/^battery.runtime:/ { print $2  }' /tmp/ups)
+
+upsStatus=$(awk '/^ups.status:/ { print $2,$3  }' /tmp/ups)
+
+printf "${GREEN}UPS Manufacturer: ${YELLOW} $mfg \n"
+printf "${GREEN}UPS Backup Model: ${YELLOW} $model \n"
+printf "${GREEN}UPS Status: ${YELLOW}$upsStatus \n"
+printf "${GREEN}UPS Vendor Id: ${YELLOW}$vendorId \n\n"
+
+printf "${GREEN} Input Voltage: ${YELLOW}$voltageIn \n"
+printf "${GREEN}Output Voltage: ${YELLOW}$voltageOut \n\n"
+
+printf "${GREEN}Battery Charge: ${YELLOW}$batteryChg \n"
+printf "${GREEN}Battery Voltage: ${YELLOW}$batteryVolts VDC \n"
+printf "${GREEN}Battery Time Remaining: ${YELLOW}$((batteryTime / 60 )) Mins. \n\n"
+printf "${NORMAL}"
+
+rm /tmp/ups

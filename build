@@ -1,0 +1,51 @@
+#!/bin/bash
+# =======================================================================================
+#   This script will build all source files into two final installation files:
+#
+#   1.  install.sh - this computer-side file will set installation into motion
+#   2.  VdnMeshChip.tar - this archive contains all remaining installation files
+# =======================================================================================
+
+echo "Removing .DS_Store files"
+find . -name '.DS_Store' -type f -delete
+
+echo "Building installation files to ./deploy/"
+# Capture current path...
+orig=`pwd`
+
+# Update build#
+lfs=$(ls chip/etc/build* | tail -1 | cut -c 16-18); nfs=$(($lfs+1)); mv chip/etc/build#$lfs chip/etc/build#$nfs
+
+# Clear the deployment folder for the new build...
+rm -r $orig/deploy/*
+mkdir $orig/deploy/mac
+mkdir $orig/deploy/linux
+mkdir $orig/deploy/windows
+
+echo "Archiving chip root files..."
+# tar all folders/files
+cd $orig/chip/
+tar -cf $orig/deploy/root.tar ./
+
+# move packages to main tar...
+cd $orig/deploy
+tar -cf VdnMeshChip.tar root.tar
+rm root.tar
+
+# include installation support files in main tar...
+cd $orig/installers/mac
+tar -rf $orig/deploy/VdnMeshChip.tar push.exp
+tar -rf $orig/deploy/VdnMeshChip.tar run.exp
+cd $orig/installers/common
+tar -rf $orig/deploy/VdnMeshChip.tar vdn_rsa.pub
+tar -rf $orig/deploy/VdnMeshChip.tar vdn_rsa
+
+# create single file Mac Installer...
+cp $orig/installers/mac/install $orig/deploy/mac/install
+cat $orig/deploy/VdnMeshChip.tar >> $orig/deploy/mac/install
+
+#remove build files
+rm $orig/deploy/VdnMeshChip.tar
+cd $orig
+
+echo "Build complete!"

@@ -1,0 +1,139 @@
+#!/bin/bash
+
+
+show_help()
+{
+echo -e "Usage: \033[34mbatmon \033[32m[\033[0m OPTION...\033[32m]\033[0m"
+echo -e "---------------------------------"
+echo -e "Examples:"
+echo -e "batmon status          # Display battery status"
+echo -e "batmon test            # Perform battery charge/discharge rate & log."
+echo -e "batmon check           # Monitor battery voltage & current, shutdown chip when low.\n"
+}
+
+display() {
+echo -e "Battery Voltage = $BAT_VOLT_FLOAT"
+echo -ne "Battery Charge  = "
+
+if [ "$BAT_ICHG_FLOAT" == "0" ]; then
+    echo -ne "\033[31m-"$BAT_IDISCHG"\033[0m mA\n"
+else
+    echo -ne "\033[32m"$BAT_ICHG_FLOAT"\033[0m mA\n" 
+fi
+
+echo "Battery Gauge   = "$BAT_GAUGE_DEC"%"
+echo "Internal Temp.  = "$TEMP_C"c / "$TEMP_F"f"
+echo
+}
+
+readBattery() {
+
+# read battery voltage.
+    BAT_VOLT_MSB=$(/usr/sbin/i2cget -y -f 0 0x34 0x78)
+    BAT_VOLT_LSB=$(/usr/sbin/i2cget -y -f 0 0x34 0x79)
+    BAT_BIN=$(( $(($BAT_VOLT_MSB << 4)) | $(($(($BAT_VOLT_LSB & 0x0F)) )) ))
+    BAT_VOLT_FLOAT=$(echo "($BAT_BIN*1.1)"|bc)
+    BAT_VOLT=${BAT_VOLT_FLOAT%.*}
+
+# read charging status.
+    BAT_ICHG_MSB=$(/usr/sbin/i2cget -y -f 0 0x34 0x7A)
+    BAT_ICHG_LSB=$(/usr/sbin/i2cget -y -f 0 0x34 0x7B)
+    BAT_ICHG_BIN=$(( $(($BAT_ICHG_MSB << 4)) | $(($(($BAT_ICHG_LSB & 0x0F)) )) ))
+    BAT_ICHG_FLOAT=$(echo "($BAT_ICHG_BIN*0.5)"|bc)
+    BAT_ICHG=${BAT_ICHG_FLOAT%.*}
+    BAT_IDISCHG_MSB=$(i2cget -y -f 0 0x34 0x7C)
+    BAT_IDISCHG_LSB=$(i2cget -y -f 0 0x34 0x7D)
+    BAT_IDISCHG_BIN=$(( $(($BAT_IDISCHG_MSB << 5)) | $(($(($BAT_IDISCHG_LSB & 0x1F)) )) ))
+    BAT_IDISCHG=$(echo "($BAT_IDISCHG_BIN*0.5)"|bc)
+
+#read fuel gauge B9h
+    BAT_GAUGE_HEX=$(i2cget -y -f 0 0x34 0xb9)
+    BAT_GAUGE_DEC=$(($BAT_GAUGE_HEX))
+
+#read internal temperature
+    TEMP_MSB=$(i2cget -y -f 0 0x34 0x5e)
+    TEMP_LSB=$(i2cget -y -f 0 0x34 0x5f)
+    TEMP_BIN=$(( $(($TEMP_MSB << 4)) | $(($(($TEMP_LSB & 0x0F)) )) ))
+    TEMP_C=$(echo "($TEMP_BIN*0.1-144.7)"|bc)
+    TEMP_F=$(echo "scale=2;((9/5) * $TEMP_C) + 32" |bc)
+}
+
+status()
+{
+STATUS="TRUE"
+checkBattery
+}
+
+batteryTest()
+{
+[ -f "/var/www/html/battest.log" ] || { touch /var/www/html/battest.log ; chmod 755 /var/www/html/battest.log ;}
+
+# get updated values
+readBattery
+display
+
+# check to see if we need to shutdown.
+if [ $BAT_VOLT -le $MINVOLTAGELEVEL ]; then
+   shutdown -h now
+   echo "Shut down Chip"
+fi
+
+echo "`date -u`" "$@" $BAT_VOLT_FLOAT " " $BAT_ICHG_FLOAT " " $BAT_GAUGE_DEC " " $TEMP_F >> /var/www/html/battest.log
+sleep 600
+batteryTest
+
+}
+
+log() {
+    echo "`date -u`" "$@"
+    logger -p user.notice -t $SCRIPT_NAME "$@"
+}
+
+checkBattery()
+{
+if [ "$STATUS" == "TRUE" ]; then display; fi
+
+    # CHECK BATTERY LEVEL AGAINST MINVOLTAGELEVEL
+    if [ $BAT_VOLT -le $MINVOLTAGELEVEL ]; then
+      if [ "$STATUS" != "TRUE" ]; then log "CHIP BATTERY VOLTAGE $BAT_VOLT IS LESS THAN $MINVOLTAGELEVEL"; fi;
+
+        # IF CHARGE CURRENT IS LESS THAN MINCHARGECURRENT, WE NEED TO SHUTDOWN
+        if [ $BAT_ICHG -le $MINCHARGECURRENT ]; then
+            shutdown -h now
+        else
+          if [ "$STATUS" != "TRUE" ]; then log "CHIP BATTERY IS CHARGING @ $BAT_ICHG_FLOAT"; fi;
+        fi
+
+    else
+      if [ "$STATUS" != "TRUE" ]; then log "CHIP BATTERY CHECK: VOLTS=$BAT_VOLT / CHARGE=$BAT_ICHG_FLOAT"; fi;
+    fi
+
+
+}
+
+# ------------------[ MAIN ]-------------------------------------------------------------
+
+MINVOLTAGELEVEL=3000
+MINCHARGECURRENT=10
+STATUS="FALSE"
+SCRIPT_NAME=$(basename $0)
+
+/usr/sbin/i2cset -y -f 0 0x34 0x82 0xC3
+
+POWER_OP_MODE=$(/usr/sbin/i2cget -y -f 0 0x34 0x01)
+BAT_EXIST=$(($(($POWER_OP_MODE&0x20))/32))
+
+if [ $BAT_EXIST == 1 ]; then
+
+readBattery
+
+   if [ $# -eq 0 ]; then show_help; fi
+   if [[ $@ == "status" ]]; then status; fi
+   if [[ $@ == "test" ]]; then batteryTest; fi
+   if [[ $@ == "check" ]]; then checkBattery; fi
+
+else
+
+echo -e "\033[5m \033[31m No Battery was Detected ! \033[0m\n"
+fi
+

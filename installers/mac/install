@@ -1,0 +1,68 @@
+#!/bin/bash
+
+# This is the VDN Chip Mesh Firmware installation process.  This script will untar
+# the package files from VdnMeshChip.tar and move them to the chip.  After moving
+# the files, the installation routine will be started remotely on the chip.
+
+start=$(date +'%s')
+echo -e '\nInstalling Micro Mesh...'
+echo -e '\nLooking for chip.local (Please use <CTRL> + c  to cancel)'
+
+AVAILABLE=''
+while [[ $AVAILABLE == '' ]]
+do
+    AVAILABLE=`ping -c1 chip.local 2>/dev/null | grep '64 bytes from '`
+    printf "."
+done
+
+echo -e '\nFound chip.local!'
+
+echo -e "Extracting installation files locally..."
+# Capture current path...
+orig=`pwd`
+
+# Create temporary directory for installation files...
+mkdir /tmp/chip.install
+
+# Untar installation files...
+cd /tmp/chip.install
+tail -n +69 $orig/$0 | tar xf -
+chmod 600 /tmp/chip.install/vdn_rsa
+
+echo -e "Copying installation files to chip..."
+# Create remote directories for installation files...
+expect run.exp "mkdir /tmp/vdn; mkdir /root/.ssh" root chip.local chip >/dev/null 2>&1
+
+# Setup key...
+expect push.exp vdn_rsa.pub /tmp/vdn/. root chip.local chip >/dev/null 2>&1
+expect run.exp "cat /tmp/vdn/vdn_rsa.pub >> /root/.ssh/authorized_keys" root chip.local chip >/dev/null 2>&1
+
+# Set date on chip...
+echo -e "Setting date on the chip to `date`"
+ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o HostbasedAuthentication=no -i vdn_rsa chip.local "date `date '+%m%d%H%M%Y.%S'`" >/dev/null 2>&1
+
+# Push files to CHIP...
+scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o HostbasedAuthentication=no -i vdn_rsa root.tar root@chip.local:/tmp/vdn/. >/dev/null 2>&1
+
+# Begin installation on the CHIP...
+echo -e "Expanding files on the chip"
+ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o HostbasedAuthentication=no -q -i vdn_rsa root@chip.local "tar -oxf /tmp/vdn/root.tar -C /" >/dev/null 2>&1
+ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o HostbasedAuthentication=no -q -i vdn_rsa root@chip.local "chmod +x /tmp/vdn/routine" >/dev/null 2>&1
+echo -e "Starting Micro Mesh installation on chip..."
+echo -e "=============================================================="
+ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o HostbasedAuthentication=no -q -i vdn_rsa root@chip.local "/tmp/vdn/./routine"
+
+echo -e "\n\nMicro Mesh Installation Completed! in $(($(date +'%s') - $start)) seconds."
+echo -e "\nYour browser is now launching to http://chip.local.\n"
+
+# Auto Launch the Default Browser to http://chip.local
+OS=`uname`
+if [ $OS == "Darwin" ] ; then `open http://chip.local`; fi
+if [ $OS == "Linux" ] ; then `x-www-browser http://chip.local`; fi
+
+# Return to original directory...
+cd $orig
+
+# Clean up temporary installation directory...
+rm -r /tmp/chip.install
+exit

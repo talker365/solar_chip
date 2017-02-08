@@ -1,0 +1,6 @@
+#!/bin/bash
+orig=`pwd`
+
+echo $0
+
+echo $orig/$0

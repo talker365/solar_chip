@@ -1,0 +1,177 @@
+# 0) login as root
+
+sudo -i
+
+
+# 1) Make sure that CHIP is up-to-date with all newest packages
+
+apt-get update
+apt-get upgrade
+
+
+# 2) Then Install dnsmasq:
+
+apt-get install dnsmasq
+
+
+# 3) Verify that the CHIP recognizes the usb-ethernet adaptor.
+
+lsusb
+
+
+# 4) Download the kernel mods for enabling NAT
+
+cd /lib/modules/4.4.13-ntc-mlc/kernel/net/ipv4/netfilter
+wget https://dl.dropboxusercontent.com/u/48891705/chip/4.4.13-ntc-mlc/ipt_MASQUERADE.ko
+wget https://dl.dropboxusercontent.com/u/48891705/chip/4.4.13-ntc-mlc/nf_nat_masquerade_ipv4.ko
+depmod
+
+
+# 5) Create a configure file . With this eth0 becomes a way to connect to a network, and wlan1 becomes CHIPs access point.
+
+nano /etc/dnsmasq.d/access_point.conf 
+
+
+# Add some lines in order to transfer ethernet to wlan1
+# We also want to set the range and time of leases:
+
+		#If you want dnsmasq to listen for DHCP and DNS requests only on
+		#specified interfaces (and the loopback) give the name of the
+		#interface (eg eth0) here.
+		#Repeat the line for more than one interface.
+		interface=wlan1
+		#Or you can specify which interface not to listen on
+		except-interface=eth0 
+
+		#Uncomment this to enable the integrated DHCP server, you need
+		#to supply the range of addresses available for lease and optionally
+		#a lease time. If you have more than one network, you will need to
+		#repeat this for each network on which you want to supply DHCP
+		#service.
+		dhcp-range=172.20.0.100,172.20.0.250,1h 
+
+
+# 6) Set up a static IP for the AP(accesspoint)
+
+nano /etc/network/interfaces 
+
+#Add some lines:
+
+		# interfaces(5) file used by ifup(8) and ifdown(8)
+		# Include files from /etc/network/interfaces.d:
+		source-directory /etc/network/interfaces.d
+		auto wlan1
+		iface wlan1 inet static
+			address 172.20.0.1
+			netmask 255.255.255.0
+
+
+# 7) Restart the wlan1 interface:
+
+ifdown wlan1
+ifup wlan1
+ip addr show wlan1 
+
+#  Result you'll see the address listed
+#
+#  inet 172.20.0.1 
+
+
+# 8) Restart the DHCP server
+
+/etc/init.d/dnsmasq restart  
+
+
+# 9) Turn on DNS forwarding
+
+sysctl -w net.ipv4.ip_forward=1
+
+
+# 10) Setup NAT to route through eth0
+
+iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+
+
+# 11) Configure the WiFi access point on wlan1
+
+nano /etc/hostapd.conf  
+
+		interface=wlan1
+		driver=nl80211
+		ssid=aredn-vdn-AP
+		channel=1
+		auth_algs=3
+		max_num_sta=10
+		wpa=2
+		wpa_passphrase=123456789
+		wpa_pairwise=TKIP CCMP
+		rsn_pairwise=CCMP
+		ctrl_interface=/var/run/hostapd 
+
+
+# 12) Create script for handling service spin up
+
+nano /usr/sbin/vdn-router
+
+		#!/bin/bash
+
+		# Make sure interface is up
+		ifdown wlan1
+		ifup wlan1
+
+		# Enable DNS forwarding
+		sysctl -w net.ipv4.ip_forward=1
+
+		# Enable NAT
+		iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+
+		# Start the Access Point
+		/usr/sbin/hostapd /etc/hostapd.conf 
+
+
+# 13) Make the spin up script executable
+
+chmod +x /usr/sbin/vdn-router
+
+
+# 14) Configure it to create AP on boot.
+
+nano /lib/systemd/system/hostapd-systemd.service 
+
+#  Add some lines:
+
+		[Unit]
+		Description=hostapd service
+		Wants=network-manager.service
+		After=network-manager.service
+		Wants=module-init-tools.service
+		After=module-init-tools.service
+		ConditionPathExists=/etc/hostapd.conf
+
+		[Service]
+		ExecStart=/usr/sbin/vdn-router
+
+		[Install]
+		WantedBy=multi-user.target 
+
+
+# 15) Disable the existing systemV script for booting hostapd:
+
+update-rc.d hostapd disable  
+
+
+# 16) Setup the systemd service
+
+systemctl daemon-reload 
+systemctl enable hostapd-systemd 
+
+
+# 17) Reboot or test:
+
+systemctl start hostapd-systemd 
+systemctl status hostapd-systemd 
+
+
+
+
+

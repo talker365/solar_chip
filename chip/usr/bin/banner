@@ -1,0 +1,32 @@
+#!/bin/bash
+host=$(hostname)
+adapter=($(ifconfig -s | head -5 | tail -3 | awk '{ print $1 }'))
+clear
+echo
+echo "Welcome"
+echo -e "\033[32m"
+echo    '      ____________________________  '
+echo    '     /                           /\ '
+echo -e '    / \033[35m VDN-CHIP \033[34mMESH NETWORK \033[32m  _/ /\'
+echo    '   /                          / \/  '
+echo    '  /  N4LDR & WD4VA            /\    '
+echo    ' /___________________________/ /    '
+echo    ' \___________________________\/     '
+echo    '  \ \ \ \ \ \ \ \ \ \ \ \ \ \ \     '
+echo -e "\033[33m"
+echo    "------------------------------------"
+echo    "      Valley Digital Networking     "
+echo    "===================================="
+echo -e "\033[0m"
+for i in "${adapter[@]}"
+do
+  status=$(ifconfig $i | grep UP | awk '{ print $1 }' )
+
+  if [ "$status" == "UP" ]; then ip=$(ifconfig $i 2>/dev/null|awk '/inet addr:/ {print $2}'|sed 's/addr://'); enabled=$(ifconfig $i | grep MULTICAST | awk '{print $3}');
+  if [ "$i" == "usb0" ]; then echo -en " "; fi; echo -en "  \033[36m$i: \033[33m[$ip] ";
+  if [[ "$enabled" == "RUNNING" ]]; then echo -e "\033[32m$enabled\033[0m"; else echo -e "\033[31mDOWN\033[0m"; fi; fi
+done
+
+olsr=$(service olsrd status | grep Active: | awk '{print $2$3}')
+echo -en "\n  \033[36m[OLSR:] "
+if [[ "$olsr" == "active (running)" ]]; then echo -en "\033[31m"; echo -e "$olsr"; else echo -en "\033[31m"; fi; echo -e "DOWN"

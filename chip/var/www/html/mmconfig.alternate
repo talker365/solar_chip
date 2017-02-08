@@ -1,0 +1,189 @@
+#!/bin/bash 
+
+<<Interface_Modes
+
+ Interface: wlan1 = AP for all modes.
+
+ Parameters: type, Callsign, NodeId, AdminPassword, NodeCH, Eth0Mode, RouterName, WifiSSID, WifiPassword, Eth0Use, apSSID, apPASS, apCH, nodeSSID
+
+Interface_Modes
+
+#---[ FUNCTIONS ]---------------------------------------------------------------------
+
+connectWifi()
+{
+# Connect to Wifi
+sudo nmcli dev disconnect wlan1 2>&1
+sudo nmcli device wifi connect $wifiSSID password $wifiPASS ifname wlan0 2>&1
+}
+
+createAP()
+{
+# Build /etc/hostapd.conf file
+newfile="/etc/hostapd.conf"
+echo "interface=wlan1" > $newfile
+echo "driver=nl80211" >> $newfile
+echo "ssid=$apSSID" >> $newfile
+echo "channel=$apCH" >> $newfile
+echo "auth_algs=3" >> $newfile
+echo "max_num_sta=10" >> $newfile
+echo "wpa=2" >> $newfile
+echo "wpa_passphrase=$apPASS" >> $newfile
+echo "wpa_pairwise=TKIP CCMP" >> $newfile
+echo "rsn_pairwise=CCMP" >> $newfile
+echo "ctrl_interface=/var/run/hostapd" >> $newfile
+
+# Restart Services
+[ -f "/var/run/hostapd/wlan1" ] && rm -r "/var/run/hostapd/wlan1"
+sudo /usr/sbin/update-rc.d hostapd disable
+sudo /bin/systemctl daemon-reload
+sudo /bin/systemctl enable hostapd-systemd
+sudo /bin/systemctl restart hostapd-systemd
+}
+
+createADHOC()
+{
+echo "#!/bin/sh" > /usr/sbin/olsrd-adhoc-setup
+echo "# Auto created by Valley Digital Network Installer." >> /usr/sbin/olsrd-adhoc-setup
+#echo "/sbin/ifconfig wlan0 down" >> /usr/sbin/olsrd-adhoc-setup
+#echo "sleep 1" >> /usr/sbin/olsrd-adhoc-setup
+echo "/sbin/iwconfig wlan0 mode ad-hoc channel $nodeCH essid $nodeSSID" >> /usr/sbin/olsrd-adhoc-setup
+echo "sleep 1" >> /usr/sbin/olsrd-adhoc-setup
+echo "/sbin/ifconfig wlan0 up" >> /usr/sbin/olsrd-adhoc-setup
+#echo "sleep 1" >> /usr/sbin/olsrd-adhoc-setup
+
+#echo "/sbin/iwconfig wlan0 mode ad-hoc " >> /usr/sbin/olsrd-adhoc-setup
+#echo "/sbin/iwconfig wlan0 channel $nodeCH " >> /usr/sbin/olsrd-adhoc-setup
+#echo "/sbin/iwconfig wlan0 essid $nodeSSID " >> /usr/sbin/olsrd-adhoc-setup
+#echo "/sbin/iwconfig wlan0 key off " >> /usr/sbin/olsrd-adhoc-setup
+#echo "/sbin/iwconfig wlan0 txpower auto " >> /usr/sbin/olsrd-adhoc-setup
+#echo "sleep 1 " >> /usr/sbin/olsrd-adhoc-setup
+#echo "/sbin/iw dev wlan0 connect $nodeSSID " >> /usr/sbin/olsrd-adhoc-setup
+#echo "done"
+sudo chmod 755 /usr/sbin/olsrd-adhoc-setup
+
+# Lets Calculate the IP Address via Mac Address
+echo -n "Setting up IP address: "
+MACID=`ifconfig | grep wlan0 | sed 's|.*HWaddr ||'`
+MAC4=`echo $MACID | cut -d : -f 4`
+MAC5=`echo $MACID | cut -d : -f 5`
+MAC6=`echo $MACID | cut -d : -f 6`
+ip2=`printf %d 0x$MAC4`
+ip3=`printf %d 0x$MAC5`
+ip4=`printf %d 0x$MAC6`
+net=10
+nodeIP=$net.$ip2.$ip3.$ip4
+ifconfig wlan0 inet $nodeIP broadcast $net.255.255.255
+
+# add to /etc/network/interfaces
+echo >> /etc/network/interfaces
+echo "auto wlan0 " >> /etc/network/interfaces
+echo "iface wlan0 inet static " >> /etc/network/interfaces
+echo -e "\taddress $nodeIP" >> /etc/network/interfaces
+echo -e "\tnetmask 255.0.0.0 " >> /etc/network/interfaces
+echo -e "\twireless-channel $nodeCH " >> /etc/network/interfaces
+echo -e "\twireless-essid $nodeSSID" >> /etc/network/interfaces
+echo -e "\twireless-mode ad-hoc " >> /etc/network/interfaces
+}
+
+createOLSR()
+{
+# Create the OLSRD Config File
+echo 
+
+}
+
+#---[ MAIN ]----------------------------------------------------------------------------------
+
+clear
+#if [[ $# -eq 0 ]]; then checkInterfaces; fi
+
+request=$1
+
+if [[ $request == "check" ]]; then 
+   if [[ $2 == "installed" ]]; then [ -e "/var/www/html/.installed" ] && echo "TRUE" || echo "FALSE"; fi
+   if [[ $2 == "ethernet" ]]; then [ -d "/sys/class/net/eth0" ] && echo "TRUE" || echo "FALSE"; fi
+fi
+
+# Get all Parameter Values
+  callsign=$2
+  nodeID=$3
+  adminPASS=$4
+  nodeCH=$5
+  nodeEthMode=$6
+  shift; shift; shift; shift; shift; shift;
+  routerName=$1
+  wifiSSID=$2
+  wifiPASS=$3
+  routeEthMode=$4
+  apSSID=$5
+  apPASS=$6
+  apCH=$7
+  nodeSSID=$8
+
+# Router Mode
+if [[ $request == "microrouter" ]]; then  
+
+  echo "Router [$routerName]"
+  echo "Wifi [$wifiSSID]"
+  echo "WifiPassword [$wifiPASS]"
+  echo "Eth Mode [$routeEthMode]"
+  echo "AP [$apSSID]"
+  echo "AP-Pass [$apPASS]"
+  echo "AP-CH [$apCH]"
+  echo
+
+if [[ $routeEthMode == "WAN" ]]; then 
+  echo "SETUP IP Forwarding for ETH0"
+fi
+
+  /etc/init.d/dnsmasq restart
+  connectWifi
+  createAP
+
+fi
+
+# Mesh Mode
+if [[ $request == "micromesh" ]]; then 
+
+  echo "Callsign [$callsign]"
+  echo "NodeID [$nodeID]"
+  echo "Admin Password [$adminPASS]"
+  echo "Node Channel [$nodeCH]"
+  echo "Node Ethernet Mode [$nodeEthMode]"
+  echo "Node SSID [$nodeSSID]"
+  echo
+  echo "Router [$routerName]"
+  echo "Wifi [$wifiSSID]"
+  echo "WifiPassword [$wifiPASS]"
+  echo "Eth Mode [$routeEthMode]"
+  echo "AP [$apSSID]"
+  echo "AP-Pass [$apPASS]"
+  echo "AP-CH [$apCH]"
+  echo
+
+  createAP
+  createADHOC
+  createOLSR
+
+fi
+
+# Set host file and hostname
+#  wlanIP=`ifconfig wlan1 | grep "inet addr" | cut -d ':' -f 2 | cut -d ' ' -f 1`
+  echo -e "127.0.0.1\tlocalhost" > /etc/hosts
+  echo -e "$nodeIP\t$nodeID" >> /etc/hosts
+  echo "::1       localhost ip6-localhost ip6-loopback" >> /etc/hosts
+  echo "ff02::1   ip6-allnodes" >> /etc/hosts
+  echo "ff02::2   ip6-allrouters" >> /etc/hosts
+  echo $nodeID > /etc/hostname
+
+  sudo chgrp -R www-data /etc/olsrd/olsrd.conf
+  sudo chmod g+w -R /etc/olsrd/olsrd.conf
+
+# Update resolv.conf file.
+if [ -L /etc/resolv.conf ]; then
+    rm -f /etc/resolv.conf
+    touch /etc/resolv.conf
+fi
+  sudo bash -c "echo 'nameserver 8.8.8.8' > /etc/resolv.conf"
+

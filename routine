@@ -1,0 +1,80 @@
+#!/bin/bash
+
+# This script will install the VDN Chip Mesh Firmware.  This script needs to be executed
+# remotely as root.
+
+# 1) Untar installation packages
+cd /tmp/vdn/packages
+
+# 2) Install dnsmasq:
+dpkg -G -E -i dnsmasq_2.72-3+deb8u1_all.deb
+
+# 2) Install support files:
+dpkg -G -E -i liberror-perl_0.17-1.1_all.deb
+dpkg -G -E -i libcurl3-gnutls_7.38.0-4+deb8u5_armhf.deb
+
+# 2) Install git:
+dpkg -G -E -i git-man_2.1.4-2.1+deb8u2_all.deb
+dpkg -G -E -i git_1%3a2.1.4-2.1+deb8u2_armhf.deb
+dpkg -G -E -i git_2.1.4-2.1+deb8u2_armhf.deb
+
+# 2) Install support files:
+dpkg -G -E -i rsync_3.1.1-3_armhf.deb
+dpkg -G -E -i ssl-cert_1.0.35_all.deb
+
+# 2) Install apache:
+dpkg -G -E -i libapr1_1.5.1-3_armhf.deb
+dpkg -G -E -i libaprutil1_1.5.4-1_armhf.deb
+dpkg -G -E -i libaprutil1-dbd-sqlite3_1.5.4-1_armhf.deb
+dpkg -G -E -i libaprutil1-ldap_1.5.4-1_armhf.deb
+dpkg -G -E -i liblua5.1-0_5.1.5-7.1_armhf.deb
+dpkg -G -E -i apache2-bin_2.4.10-10+deb8u7_armhf.deb
+dpkg -G -E -i apache2-data_2.4.10-10+deb8u7_all.deb
+dpkg -G -E -i apache2-utils_2.4.10-10+deb8u7_armhf.deb
+dpkg -G -E -i mime-support_3.58_all.deb
+dpkg -G -E -i apache2_2.4.10-10+deb8u7_armhf.deb
+# php files...
+dpkg -G -E -i libmagic1_1%3a5.22+15-2+deb8u2_armhf.deb
+dpkg -G -E -i libonig2_5.9.5-3.2_armhf.deb
+dpkg -G -E -i libperl4-corelibs-perl_0.003-1_all.deb
+dpkg -G -E -i libqdbm14_1.8.78-5+b1_armhf.deb
+dpkg -G -E -i lsof_4.86+dfsg-1_armhf.deb
+dpkg -G -E -i psmisc_22.21-2_armhf.deb
+dpkg -G -E -i php5-common_5.6.29+dfsg-0+deb8u1_armhf.deb
+dpkg -G -E -i php5-json_1.3.6-1_armhf.deb
+dpkg -G -E -i php5-cli_5.6.29+dfsg-0+deb8u1_armhf.deb
+dpkg -G -E -i php5-readline_5.6.29+dfsg-0+deb8u1_armhf.deb
+dpkg -G -E -i libapache2-mod-php5_5.6.29+dfsg-0+deb8u1_armhf.deb
+# vim...
+dpkg -G -E -i libgpm2_1.20.4-6.1+b2_armhf.deb
+dpkg -G -E -i vim-common_2%3a7.4.488-7+deb8u1_armhf.deb
+dpkg -G -E -i vim-tiny_2%3a7.4.488-7+deb8u1_armhf.deb
+dpkg -G -E -i vim-runtime_2%3a7.4.488-7+deb8u1_all.deb
+dpkg -G -E -i vim_2%3a7.4.488-7+deb8u1_armhf.deb
+# olsr
+dpkg -G -E -i olsrd_0.6.6.2-1_armhf.deb
+dpkg -G -E -i olsrd-plugins_0.6.6.2-1_armhf.deb
+
+#wireless tools (iwconfig)
+dpkg -G -E -i libc6_2.19-18+deb8u7_armhf.deb
+dpkg -G -E -i libiw30_30~pre9-8_armhf.deb
+dpkg -G -E -i wireless-tools_30~pre9-8_armhf.deb
+
+#vtunnel
+#dpkg -G -E -i makedev_2.3.1-93_all.deb
+dpkg -G -E -i zlib1g_1.2.8.dfsg-2+b1_armhf.deb
+dpkg -G -E -i vtun_3.0.3-2_armhf.deb
+
+# 4) Download the kernel mods for enabling NAT
+cd /lib/modules/4.4.13-ntc-mlc/kernel/net/ipv4/netfilter
+depmod
+cd /tmp/vdn
+
+# 20) Setup apache group permissions
+touch /etc/resolv.conf
+
+for file in /etc/hosts /etc/hostname /etc/resolv.conf /etc/network/interfaces /var/www/html/wifiscan /var/www/html/mmconfig; do
+    sudo chgrp www-data ${file}
+    sudo chmod g+w ${file}
+done
+

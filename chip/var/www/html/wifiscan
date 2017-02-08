@@ -1,0 +1,96 @@
+#!/bin/bash
+# *  SSID              MODE    CHAN  RATE       SIGNAL  BARS  SECURITY
+
+if [[ $# -eq 0 ]]; then echo -e "Available Parameters are AP or MESH\n\n"; exit 1; fi
+if [[ $1 == "AP" ]]; then mode="Infra"; fi
+if [[ $1 == "MESH" ]]; then mode="Ad-Hoc"; fi
+if [[ $1 == "CH" ]]; then
+	nmcli -f CHAN d wifi list | grep -v CHAN | sort | uniq | grep -v -e '^$' > ./wifilist
+
+	echo -e "<optgroup label=\"Ham Band and ISM/WiFi\">"
+
+
+	CHANNEL=1
+    while [  $CHANNEL -lt 12 ]; do
+
+		if [[ $CHANNEL == 7 ]]
+		then
+			echo -e "</optgroup>"
+			echo -e "<optgroup label=\"WiFi Only\">"
+		fi
+
+        if [[ $CHANNEL == 11 ]]; then
+			echo -e "<option value\"$CHANNEL\" selected='selected'>$CHANNEL" 
+		else
+			echo -e "<option value\"$CHANNEL\">$CHANNEL" 
+		fi
+
+		if grep -Fq "$CHANNEL" ./wifilist
+		then
+    		# code if found
+			echo -e " - in use nearby"
+		fi
+
+		echo -e "</option>"
+
+        let CHANNEL=CHANNEL+1 
+    done
+	echo -e "</optgroup>"
+
+	rm ./wifilist
+	exit 0
+fi
+
+if [[ $1 == "SSID" ]]; then
+	nmcli -f SSID,MODE,CHAN d wifi list | grep -v SSID | grep -v -e '--' | grep -e 'Ad-Hoc' | sort | uniq | grep -v -e '^$' > ./wifilist
+	if grep -Fq "AREDN-VDN-20-v3  Ad-Hoc  1" ./wifilist; then
+		echo "nothing" >> /dev/null
+	else
+		echo -e "AREDN-VDN-20-v3  default  1" >> ./wifilist
+	fi
+	while read NAME MODE CHAN
+	do
+		if [[ $MODE == "Ad-Hoc" ]]; then
+    		echo -e "<option value=\"$NAME|||$CHAN\">$NAME (ch $CHAN)</option>"
+		else
+    		echo -e "<option value=\"$NAME|||$CHAN\">$NAME (ch $CHAN - NEW)</option>"
+		fi
+	done < ./wifilist | uniq - | sort
+
+    rm ./wifilist
+    exit 0
+
+fi
+
+if [[ $2 != "HTML" ]]; then 
+   nmcli -f SSID,MODE,CHAN,SIGNAL,BARS d wifi list | grep $mode | egrep -v "^--|Apple" | sort | uniq 
+   exit 0
+else
+   nmcli -f SSID,MODE,CHAN,SIGNAL,BARS d wifi list | grep $mode | egrep -v "^--|Apple" | sort | uniq > ./wifilist
+fi
+
+
+printf "<table>"
+printf "<tr><th>SSID</th><th>Channel</th><th>Signal</th><th>Bars</th></tr>"
+while read SSID MODE CHAN SIG BARS ; do
+
+	if [ "$SSID" == "*" ] ; then
+        printf "<tr><th>SSID</th><th>Mode</th><th>Ch.</th><th>Rate</th><th>Signal</th><th>Bars</th><th>Security</th></tr>"
+	fi
+
+	if [ "$SSID" != "--" ] && [ "$SSID" != "*" ] ; then
+
+  		printf "<tr>\n"
+		printf "<td><a href=\"#page_configure\" class=\"ui-btn\" onclick=\"document.getElementById('ssid').value='$SSID'\">$SSID</a></td>\n"
+		#printf "<td><a href='#page_configure' class='ui-btn'>$SSID</a></td>\n"
+  		printf "<td>$CHAN</td>\n"
+  		printf "<td>$SIG</td>\n"
+  		printf "<td>$BARS</td>\n"
+  		printf "</tr>\n\n"
+	fi
+
+done < ./wifilist
+
+printf "</table>"
+
+rm ./wifilist
